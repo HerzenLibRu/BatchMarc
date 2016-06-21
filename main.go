@@ -3,44 +3,25 @@ package main
 import (
 	"github.com/robertkrimen/otto"
 	"github.com/t0pep0/marc21"
+	"io"
 	"io/ioutil"
 	"os"
-	"strconv"
 )
 
-func main() {
-	marcFile, err := os.Open(os.Args[1])
-	outFile, _ := os.Create(os.Args[2])
-	jsFile, _ := os.Open(os.Args[3])
-	jsBytes, _ := ioutil.ReadAll(jsFile)
-	jsRules := string(jsBytes)
-	if err != nil {
-		return
-	}
-	mReader := marc21.NewReader(marcFile)
+const (
+	classJS = `
 
-	for {
-		rec, err := mReader.ReadRecord()
-		if err != nil {
-			panic(err)
-		}
-		if rec == nil {
-			break
-		}
-		vm := otto.New()
-		initJS := `
-
-    function VariableSubField(name, data){
-      this.Name = name;
-      this.Data = data;
+    function VariableSubField(){
+      this.Name = "";
+      this.Data = "";
     }
 
-    function VariableField(tag, indicatorOne, indicatorTwo) {
-      this.Tag = tag;
-      this.IndicatorOne = indicatorOne;
-      this.IndicatorTwo = indicatorTwo;
+    function VariableField() {
+      this.Tag = "";
+      this.HasIndicators = "";
+      this.Indicators = [];
       this.RawData = [];
-      this.SubField = [];
+      this.SubFields = [];
     }
 
     function Leader() {
@@ -64,234 +45,213 @@ func main() {
       this.Leader = new Leader()
       this.VariableField = []
     };
-
-    orig = new MarcRecord();
-    res = new MarcRecord();
     `
+)
 
-		for tag, field := range rec.VariableField {
-			switch len(field.Indicators) {
-			case 0:
-				field.Indicators[0] = byte('#')
-				field.Indicators[1] = byte('#')
-			case 1:
-				field.Indicators = append(field.Indicators, byte('#'))
-			}
-			initJS += "\nindex = orig.VariableField.push(new VariableField(\"" + tag + "\",\"" + string(field.Indicators[0]) + "\",\"" + string(field.Indicators[1]) + "\"));"
-			field.Subfields.First()
-			sf := field.Subfields
-			for sf != nil {
-				initJS += "\norig.VariableField[index-1].SubField.push(new VariableSubField(\"" + sf.Name + "\",'" + string(sf.Data) + "'));"
-				sf = sf.Next
-			}
-			for i, arr := range field.RawData {
-				initJS += "\norig.VariableField[index-1].RawData[" + strconv.Itoa(i) + "] = [];"
-				for j, val := range arr {
-					initJS += "\norig.VariableField[index-1].RawData[" + strconv.Itoa(i) + "][" + strconv.Itoa(j) + "]=String.fromCharCode(" + strconv.Itoa(int(val)) + ");"
-				}
-			}
-		}
+type jsMachine struct {
+	otto        *otto.Otto
+	source      *marc21.MarcRecord
+	destination *marc21.MarcRecord
+}
 
-		initJS += "\norig.Leader.Status = \"" + string(rec.Status) + "\";"
-		initJS += "\norig.Leader.Type = \"" + string(rec.Type) + "\";"
-		initJS += "\norig.Leader.BibLevel = \"" + string(rec.BibLevel) + "\";"
-		initJS += "\norig.Leader.ControlType = \"" + string(rec.ControlType) + "\";"
-		initJS += "\norig.Leader.CharacterEncoding = \"" + string(rec.CharacterEncoding) + "\";"
-		initJS += "\norig.Leader.IndicatorCount = \"" + string(rec.IndicatorCount) + "\";"
-		initJS += "\norig.Leader.SubfieldCodeCount = \"" + string(rec.SubfieldCodeCount) + "\";"
-		initJS += "\norig.Leader.EncodingLevel = \"" + string(rec.EncodingLevel) + "\";"
-		initJS += "\norig.Leader.CatalogingForm = \"" + string(rec.CatalogingForm) + "\";"
-		initJS += "\norig.Leader.MultipartLevel = \"" + string(rec.MultipartLevel) + "\";"
-		initJS += "\norig.Leader.LengthOFFieldPort = \"" + string(rec.LengthOFFieldPort) + "\";"
-		initJS += "\norig.Leader.StartCharPos= \"" + string(rec.StartCharPos) + "\";"
-		initJS += "\norig.Leader.LengthImplemenDefine  = \"" + string(rec.LengthImplemenDefine) + "\";"
-		initJS += "\norig.Leader.Undefine  = \"" + string(rec.Undefine) + "\";"
+func NewJSMachine(source, destination *marc21.MarcRecord) (js *jsMachine) {
+	js = new(jsMachine)
+	js.otto = otto.New()
+	js.otto.Run(classJS)
+	js.otto.Set("LoadSource", js.fillSource)
+	js.otto.Set("WriteResult", js.getResult)
+	js.source = source
+	js.destination = destination
+	return js
+}
 
-		_, err = vm.Run(initJS)
-		if err != nil {
-			panic(err)
-		}
-		_, err = vm.Run(jsRules)
-		if err != nil {
-			panic(err)
-		}
+func (js *jsMachine) Run(src string) (err error) {
+	_, err = js.otto.Run(src)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
-		res := marc21.NewEmptyMarcRecord()
+func (js *jsMachine) fillSource(call otto.FunctionCall) otto.Value {
+	source := call.Argument(0)
+	if !source.IsObject() {
+		return otto.FalseValue()
+	}
+	object := source.Object()
+	jsValue, _ := js.otto.Run("new Leader()")
+	leader := jsValue.Object()
+	//Set leader
+	leader.Set("Status", string(js.source.Leader.Status))
+	leader.Set("Type", string(js.source.Leader.Type))
+	leader.Set("BibLevel", string(js.source.Leader.BibLevel))
+	leader.Set("ControlType", string(js.source.Leader.ControlType))
+	leader.Set("CharacterEncoding", string(js.source.Leader.CharacterEncoding))
+	leader.Set("IndicatorCount", string(js.source.Leader.IndicatorCount))
+	leader.Set("SubfieldCodeCount", string(js.source.Leader.SubfieldCodeCount))
+	leader.Set("EncodingLevel", string(js.source.Leader.EncodingLevel))
+	leader.Set("CatalogingForm", string(js.source.Leader.CatalogingForm))
+	leader.Set("MultipartLevel", string(js.source.Leader.MultipartLevel))
+	leader.Set("LengthOFFieldPort", string(js.source.Leader.LengthOFFieldPort))
+	leader.Set("StartCharPos", string(js.source.Leader.StartCharPos))
+	leader.Set("LengthImplemenDefine", string(js.source.Leader.LengthImplemenDefine))
+	leader.Set("Undefine", string(js.source.Leader.Undefine))
+	object.Set("Leader", leader)
+	jsValue, _ = object.Get("VariableField")
+	jsVariableField := jsValue.Object()
+	for _, vf := range js.source.VariableFields {
+		jsValue, _ := js.otto.Run("new VariableField()")
+		vfJS := jsValue.Object()
+		vfJS.Set("Tag", vf.Tag)
+		vfJS.Set("HasIndicators", vf.HasIndicators)
+		jsValue, _ = vfJS.Get("Indicators")
+		jsIndicators := jsValue.Object()
+		for _, ind := range vf.Indicators {
+			indJs, _ := otto.ToValue(string(ind))
+			jsIndicators.Call("push", indJs)
+		}
+		jsValue, _ = vfJS.Get("RawData")
+		jsRawData := jsValue.Object()
+		for _, raw := range vf.RawData {
+			rawJs, _ := otto.ToValue(string(raw))
+			jsRawData.Call("push", rawJs)
+		}
+		jsValue, _ = vfJS.Get("SubFields")
+		jsSubFields := jsValue.Object()
+		for _, sf := range vf.Subfields {
+			jsValue, _ := js.otto.Run("new VariableSubField()")
+			sfJs := jsValue.Object()
+			sfJs.Set("Name", sf.Name)
+			sfJs.Set("Data", string(sf.Data))
+			jsSubFields.Call("push", sfJs)
+		}
+		jsVariableField.Call("push", vfJS)
+	}
+	return otto.TrueValue()
+}
 
-		if value, err := vm.Run("res.Leader.Status"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.Status = []byte(value_str)[0]
-			}
+func (js *jsMachine) getResult(call otto.FunctionCall) otto.Value {
+	source := call.Argument(0)
+	if !source.IsObject() {
+		return otto.FalseValue()
+	}
+	object := source.Object()
+	jsValue, _ := object.Get("Leader")
+	if !jsValue.IsObject() {
+		return otto.FalseValue()
+	}
+	//Read Leader
+	leader := jsValue.Object()
+	jsValue, _ = leader.Get("Status")
+	js.destination.Leader = new(marc21.Leader)
+	js.destination.Leader.Status = jsValue.String()[0]
+	jsValue, _ = leader.Get("Type")
+	js.destination.Leader.Type = jsValue.String()[0]
+	jsValue, _ = leader.Get("BibLevel")
+	js.destination.Leader.BibLevel = jsValue.String()[0]
+	jsValue, _ = leader.Get("ControlType")
+	js.destination.Leader.ControlType = jsValue.String()[0]
+	jsValue, _ = leader.Get("CharacterEncoding")
+	js.destination.Leader.CharacterEncoding = jsValue.String()[0]
+	jsValue, _ = leader.Get("IndicatorCount")
+	js.destination.Leader.IndicatorCount = jsValue.String()[0]
+	jsValue, _ = leader.Get("SubfieldCodeCount")
+	js.destination.Leader.SubfieldCodeCount = jsValue.String()[0]
+	jsValue, _ = leader.Get("EncodingLevel")
+	js.destination.Leader.EncodingLevel = jsValue.String()[0]
+	jsValue, _ = leader.Get("CatalogingForm")
+	js.destination.Leader.CatalogingForm = jsValue.String()[0]
+	jsValue, _ = leader.Get("MultipartLevel")
+	js.destination.Leader.MultipartLevel = jsValue.String()[0]
+	jsValue, _ = leader.Get("LengthOFFieldPort")
+	js.destination.Leader.LengthOFFieldPort = jsValue.String()[0]
+	jsValue, _ = leader.Get("StartCharPos")
+	js.destination.Leader.StartCharPos = jsValue.String()[0]
+	jsValue, _ = leader.Get("LengthImplemenDefine")
+	js.destination.Leader.LengthImplemenDefine = jsValue.String()[0]
+	jsValue, _ = leader.Get("Undefine")
+	js.destination.Leader.Undefine = jsValue.String()[0]
+	//Get VariableFields
+	jsValue, _ = object.Get("VariableField")
+	jsVariableFields := jsValue.Object()
+	jsVariableFields.Call("forEach", func(call otto.FunctionCall) otto.Value {
+		jsValue = call.Argument(0)
+		if !jsValue.IsObject() {
+			return otto.Value{}
 		}
-		if value, err := vm.Run("res.Leader.Type"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.Type = []byte(value_str)[0]
-			}
+		vfJS := jsValue.Object()
+		vf := new(marc21.VariableField)
+		jsValue, _ = vfJS.Get("Tag")
+		vf.Tag = jsValue.String()
+		jsValue, _ = vfJS.Get("HasIndicators")
+		vf.HasIndicators, _ = jsValue.ToBoolean()
+		if vf.HasIndicators {
+			jsValue, _ = vfJS.Get("Indicators")
+			jsIndicators := jsValue.Object()
+			jsIndicators.Call("forEach", func(call otto.FunctionCall) otto.Value {
+				vf.Indicators = append(vf.Indicators, call.Argument(0).String()[0])
+				return otto.Value{}
+			})
 		}
-		if value, err := vm.Run("res.Leader.BibLevel"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.BibLevel = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.ControlType"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.ControlType = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.CharacterEncoding"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.CharacterEncoding = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.IndicatorCount"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.IndicatorCount = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.SubfieldCodeCount"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.SubfieldCodeCount = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.EncodingLevel"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.EncodingLevel = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.CatalogingForm"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.CatalogingForm = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.MultipartLevel"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.MultipartLevel = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.LengthOFFieldPort"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.LengthOFFieldPort = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.StartCharPos"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.StartCharPos = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.LengthImplemenDefine"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.LengthImplemenDefine = []byte(value_str)[0]
-			}
-		}
-		if value, err := vm.Run("res.Leader.Undefine"); err == nil {
-			if value_str, err := value.ToString(); err == nil {
-				res.Type = []byte(value_str)[0]
-			}
-		}
-
-		vm.Set("__readVariableField", func(call otto.FunctionCall) otto.Value {
-			indexJS, _ := call.Argument(1).ToInteger()
-			i := strconv.Itoa(int(indexJS))
-			field := new(marc21.RawField)
-			if value, err := vm.Run("res.VariableField[" + i + "].Tag"); err == nil {
-				if value_str, err := value.ToString(); err == nil {
-					field.Tag = value_str
-				}
-			}
-			if value, err := vm.Run("res.VariableField[" + i + "].IndicatorOne"); err == nil {
-				if value_str, err := value.ToString(); err == nil {
-					if len(value_str) > 1 {
-						field.Indicators = []byte{value_str[0]}
-					} else {
-						field.Indicators = []byte{'#'}
-					}
-				}
-			}
-			if value, err := vm.Run("res.VariableField[" + i + "].IndicatorTwo"); err == nil {
-				if value_str, err := value.ToString(); err == nil {
-					if len(value_str) > 1 {
-						field.Indicators = append(field.Indicators, value_str[0])
-					} else {
-						field.Indicators = append(field.Indicators, '#')
-					}
-				}
-			}
-			rawDataLength, err := vm.Run("res.VariableField[" + i + "].RawData.length")
-			if err != nil {
-				panic(err)
-			}
-			{
-				rawDataLength, _ := rawDataLength.ToInteger()
-				for j := int64(0); j < rawDataLength; j++ {
-					subArrayLength, err := vm.Run("res.VariableField[" + i + "].RawData[" + strconv.Itoa(int(j)) + "].length")
-					if err != nil {
-						panic(err)
-					}
-					arr := []byte{}
-					{
-						subArrayLength, _ := subArrayLength.ToInteger()
-						for z := int64(0); z < subArrayLength; z++ {
-							if value, err := vm.Run("res.VariableField[\"" + i + "\"].RawData[" + strconv.Itoa(int(j)) + "]" + "[" + strconv.Itoa(int(z)) + "]"); err == nil {
-								if value_str, err := value.ToString(); err == nil {
-									arr = append(arr, value_str[0])
-								}
-							}
-						}
-					}
-					field.RawData = append(field.RawData, arr)
-				}
-			}
-			field.Subfields = new(marc21.OStack)
-			subfieldCount, err := vm.Run("res.VariableField[\"" + i + "\"].SubField.length")
-			if err != nil {
-				panic(err)
-			}
-			{
-				subfieldCount, _ := subfieldCount.ToInteger()
-				for j := int64(0); j < subfieldCount; j++ {
-					sfName := ""
-					sfData := []byte{}
-					if value, err := vm.Run("res.VariableField[\"" + i + "\"].SubField[" + strconv.Itoa(int(j)) + "].Name"); err == nil {
-						if value_str, err := value.ToString(); err == nil {
-							sfName = value_str
-						}
-					}
-					if value, err := vm.Run("res.VariableField[\"" + i + "\"].SubField[" + strconv.Itoa(int(j)) + "].Data"); err == nil {
-						if value_str, err := value.ToString(); err == nil {
-							sfData = []byte(value_str)
-						}
-					}
-					field.Subfields.Add(sfName, sfData)
-				}
-			}
-			res.VariableField[field.Tag] = field
+		jsValue, _ = vfJS.Get("RawData")
+		jsRawData := jsValue.Object()
+		jsRawData.Call("forEach", func(call otto.FunctionCall) otto.Value {
+			vf.RawData = append(vf.RawData, call.Argument(0).String()[0])
 			return otto.Value{}
 		})
+		jsValue, _ = vfJS.Get("SubFields")
+		jsSubFields := jsValue.Object()
+		jsSubFields.Call("forEach", func(call otto.FunctionCall) otto.Value {
+			jsValue = call.Argument(0)
+			if !jsValue.IsObject() {
+				return otto.Value{}
+			}
+			sfJs := jsValue.Object()
+			sf := new(marc21.SubField)
+			jsValue, _ = sfJs.Get("Name")
+			sf.Name = jsValue.String()
+			jsValue, _ = sfJs.Get("Data")
+			sf.Data = []byte(jsValue.String())
+			vf.Subfields = append(vf.Subfields, sf)
+			return otto.Value{}
+		})
+		if len(vf.Subfields) == 0 && len(vf.RawData) == 0 {
+			return otto.Value{}
+		}
+		js.destination.VariableFields = append(js.destination.VariableFields, vf)
+		return otto.Value{}
+	})
+	return otto.TrueValue()
+}
 
-		_, err = vm.Run("res.VariableField.forEach(__readVariableField)")
+func main() {
+	marcFile, err := os.Open(os.Args[1])
+	outFile, _ := os.Create(os.Args[2])
+	jsFile, _ := os.Open(os.Args[3])
+	jsBytes, _ := ioutil.ReadAll(jsFile)
+	jsRules := string(jsBytes)
+	if err != nil {
+		return
+	}
+	for {
+		rec, err := marc21.ReadRecord(marcFile)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			panic(err)
+		}
+		if rec == nil {
+			break
+		}
+		res := new(marc21.MarcRecord)
+
+		js := NewJSMachine(rec, res)
+		err = js.Run(jsRules)
 		if err != nil {
 			panic(err)
 		}
-
-		//res.Status = rec.Status
-		//res.Type = rec.Type
-		//res.BibLevel = rec.BibLevel
-		//res.ControlType = 48 //rec.ControlType
-		//res.CharacterEncoding = rec.CharacterEncoding
-		//res.IndicatorCount = rec.IndicatorCount
-		//res.SubfieldCodeCount = rec.SubfieldCodeCount
-		//res.EncodingLevel = 32   //rec.EncodingLevel
-		//res.CatalogingForm = 105 //rec.CatalogingForm
-		//res.MultipartLevel = rec.MultipartLevel
-		//res.LengthOFFieldPort = rec.LengthOFFieldPort
-		//res.StartCharPos = rec.StartCharPos
-		//res.LengthImplemenDefine = rec.LengthImplemenDefine
-		//res.Undefine = rec.Undefine
-		//for _, move := range MoveMatrix {
-		//move.Do(rec, res)
-		//}
 		res.Write(outFile)
-		//fmt.Println(res)
 	}
 
 }

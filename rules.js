@@ -1,6 +1,18 @@
-orig.GetField = function(field) {
+var source = new MarcRecord();
+LoadSource(source);
+
+
+//source.VariableField.forEach(function(item,i,arr){
+  //console.log(item.Tag);
+  //item.SubFields.forEach(function(item,i,arr){
+    //console.log("\t",item.Name,":",item.Data);
+  //})
+//})
+var destination = new MarcRecord();
+
+source.GetField = function(field) {
   sItem = false;
-  orig.VariableField.forEach(function(item, i, arr){
+  source.VariableField.forEach(function(item, i, arr){
     if (item.Tag == field) {
       sItem = item;
     }
@@ -8,9 +20,9 @@ orig.GetField = function(field) {
   return sItem;
 }
 
-res.GetField = function(field) {
+destination.GetField = function(field) {
   sItem = false;
-  res.VariableField.forEach(function(item, i, arr){
+  destination.VariableField.forEach(function(item, i, arr){
     if (item.Tag == field) {
       sItem = item;
     }
@@ -18,9 +30,9 @@ res.GetField = function(field) {
   return sItem;
 }
 
-orig.IsExistsSubfield = function(field, subfield) {
-  if (!!orig.GetSubfield(field, subfield)) {
-    if (orig.GetSubfield(field, subfield).Data == undefined) {
+source.IsExistsSubfield = function(field, subfield) {
+  if (!!source.GetSubfield(field, subfield)) {
+    if (source.GetSubfield(field, subfield).Data == undefined) {
       return false;
     }
     return true;
@@ -28,9 +40,9 @@ orig.IsExistsSubfield = function(field, subfield) {
   return false;
 }
 
-res.IsExistsSubfield = function(field, subfield) {
-  if (!!res.GetSubfield(field, subfield)) {
-    if (res.GetSubfield(field, subfield).Data == undefined) {
+destination.IsExistsSubfield = function(field, subfield) {
+  if (!!destination.GetSubfield(field, subfield)) {
+    if (destination.GetSubfield(field, subfield).Data == undefined) {
       return false;
     }
     return true;
@@ -38,12 +50,12 @@ res.IsExistsSubfield = function(field, subfield) {
   return false;
 }
 
-orig.GetSubfield = function(field,subfield) {
-  if (!orig.GetField(field)) {
+source.GetSubfield = function(field,subfield) {
+  if (!source.GetField(field)) {
     return false
   }
   sItem = false
-  orig.GetField(field).SubField.forEach(function(item, i, arr){
+  source.GetField(field).SubFields.forEach(function(item, i, arr){
     if (item.Name == subfield){
       sItem = item;
     }
@@ -51,13 +63,13 @@ orig.GetSubfield = function(field,subfield) {
   return sItem;
 }
 
-res.GetSubfield = function(field, subfield) {
-  if (!res.GetField(field)) {
+destination.GetSubfield = function(field, subfield) {
+  if (!destination.GetField(field)) {
     return false
   }
   sItem = false
 
-  res.GetField(field).SubField.forEach(function(item, i, arr){
+  destination.GetField(field).SubFields.forEach(function(item, i, arr){
     if (item.Name == subfield){
       sItem = item;
     }
@@ -66,24 +78,31 @@ res.GetSubfield = function(field, subfield) {
 }
 
 function RawCopyField(from, to) {
-  if (!orig.GetField(from)){
+  if (!source.GetField(from)){
     return;
   }
-  res.VariableField.push(orig.GetField(from))
-  res.GetField(to).Tag = to;
+  destination.VariableField.push(source.GetField(from))
+  destination.GetField(to).Tag = to;
 }
 
-function CopySubfield(fromField, fromSubField, toField, toSubfield) {
-  if (!orig.GetField(fromField)){
+function CopySubfield(fromField, fromSubFields, toField, toSubfield) {
+  if (!source.GetField(fromField)){
     return;
   }
-  if (!orig.IsExistsSubfield(fromField, fromSubField)){
+  if (!source.IsExistsSubfield(fromField, fromSubFields)){
     return;
   }
-  if (!res.GetField(toField)) {
-    res.VariableField.push(new VariableField(toField, "#", "#"))
+  if (!destination.GetField(toField)) {
+    vf = new VariableField();
+    vf.Tag = toField;
+    vf.HasIndicators = true;
+    vf.Indicators = ["#","#"];
+    destination.VariableField.push(vf)
   }
-  res.GetField(toField).SubField.push(new VariableSubField(toSubfield, orig.GetSubfield(fromField, fromSubField).Data))
+  vsf = new VariableSubField();
+  vsf.Name = toSubfield;
+  vsf.Data = source.GetSubfield(fromField, fromSubFields).Data;
+  destination.GetField(toField).SubFields.push(vsf)
 }
 
 
@@ -178,15 +197,22 @@ CopySubfield("700","a","701","a");
 
 
 //ISBN Handler
-if (!res.GetField("010")) {
-  res.VariableField.push(new VariableField("010", "#","#"));
+if (!destination.GetField("010")) {
+  vf = new VariableField();
+  vf.Tag = "010";
+  vf.HasIndicators = true;
+  vf.Indicators = ["#","#"]
+  destination.VariableField.push(vf);
 }
-if (orig.IsExistsSubfield("020", "a")) {
-  if (orig.GetSubfield("020","a").Data.length <4 ){
-    res.GetField("010").SubField.push(new VariableSubField("a","-"));
+if (source.IsExistsSubfield("020", "a")) {
+    vsf = new VariableSubField();
+    vsf.Name = "a";
+  if (source.GetSubfield("020","a").Data.length <4 ){
+    vsf.Data = "-"
   } else {
-    res.GetField("010").SubField.push(new VariableSubField("a", orig.GetSubfield("020","a").Data));
+    vsf.Data = source.GetSubfield("020","a").Data
   }
+  destination.GetField("010").SubFields.push(vsf);
 }
 
 //CodingData
@@ -202,66 +228,110 @@ if (day.length < 2) {
 }
 currentDate = currentDate + month +day;
 var data = currentDate + "d";
-if (orig.IsExistsSubfield("260","c")) {
-  currentDate = currentDate + orig.GetSubfield("260","c").Data;
+if (source.IsExistsSubfield("260","c")) {
+  currentDate = currentDate + source.GetSubfield("260","c").Data;
 } else {
   currentDate = currentDate + currentDate.substr(0,8);
 }
 currentDate = currentDate + "####u##Y0rusY0102####ca";
-if (!res.GetField("100")) {
-  vf = new VariableField("100", "#", "#");
-  vf.SubField.push(new VariableSubField("a", currentDate));
-  res.VariableField.push(vf);
+vfs = new VariableSubField();
+vfs.Name = "a"
+vfs.Data = currentDate;
+if (!destination.GetField("100")) {
+  vf = new VariableField();
+  vf.Tag = "100";
+  vf.HasIndicators = true;
+  vf.Indicators = ["#", "#"];
+  vf.SubFields.push(vfs);
+  destination.VariableField.push(vf);
 } else {
-  res.GetField("100").SubField.push(new VariableSubField("a", currentDate));
+  destination.GetField("100").SubFields.push(vfs);
 }
 
 //UDK Handler
-if (res.IsExistsSubfield("675","a")) {
-  res.GetField("675").SubField.push(new VariableSubField("v", "Сокращенное издание 2001"));
+if (destination.IsExistsSubfield("675","a")) {
+  vsf = new VariableSubField();
+  vsf.Name ="v";
+  vsf.Data = "Сокращенное издание 2001";
+  destination.GetField("675").SubFields.push(vsf);
 }
 
+vsf = new VariableSubField();
+vsf.Name = "a";
+vsf.Data = "Кировская ГОУНБ";
 //GOUNB Handler
-if (!res.GetField("899")) {
-  vf = new VariableField("899", "#", "#");
-  vf.SubField.push(new VariableSubField("a", "Кировская ГОУНБ"))
-  res.VariableField.push(vf);  
+if (!destination.GetField("899")) {
+  vf = new VariableField();
+  vf.Tag =  "899";
+  vf.HasIndicators = true;
+  vf.Indicators = ["#", "#"];
+  vf.SubFields.push(vsf)
+  destination.VariableField.push(vf);  
 } else {
-  res.GetField("899").SubField.push(new VariableSubField("a", "Кировская ГОУНБ"));
+  destination.GetField("899").SubFields.push(vsf);
 }
 
 //BBK Handler
-if (res.IsExistsSubfield("686","a")) {
-  if (res.GetSubfield("686","a").Data.length > 0) {
-    res.GetField("686").SubField.push(new VariableSubField("v", "LBC/RL"))
-    res.GetField("686").SubField.push(new VariableSubField("2", "rubbk"))
+if (destination.IsExistsSubfield("686","a")) {
+  if (destination.GetSubfield("686","a").Data.length > 0) {
+    vsfV = new VariableSubField();
+    vsfV.Name = "v";
+    vsfV.Data = "LBC/RL";
+    destination.GetField("686").SubFields.push(vsfV);
+    vsf2 = new VariableSubField();
+    vsf2.Name = "2";
+    vsf2.Data = "rubbk";
+    destination.GetField("686").SubFields.push(vsf2);
   }
 }
 
 var indicators = [];
-indicators["700"] = ["#","1"];
+indicators["101"] = ["0","#"];
 indicators["200"] = ["1","#"];
+indicators["225"] = ["1","#"];
+indicators["327"] = ["1","#"];
+indicators["500"] = ["1","0"];
+indicators["510"] = ["1","#"];
+indicators["512"] = ["1","#"];
+indicators["513"] = ["1","#"];
+indicators["514"] = ["1","#"];
+indicators["516"] = ["1","#"];
+indicators["517"] = ["1","#"];
+indicators["532"] = ["1","0"];
 indicators["606"] = ["1","#"];
+indicators["700"] = ["#","1"];
 indicators["701"] = ["#","1"];
+indicators["702"] = ["#","1"];
+indicators["710"] = ["0","2"];
+indicators["711"] = ["0","2"];
+indicators["712"] = ["0","2"];
+
 
 indicators.forEach(function(item, i, arr) {
-  if (res.GetField(i)) {
-    res.GetField(i).IndicatorOne = item[0];
-    res.GetField(i).IndicatorTwo = item[1];
+  if (destination.GetField(i)) {
+    destination.GetField(i).Indicators = item;
   }
 })
 
-res.Leader.Status = orig.Leader.Status;
-res.Leader.Type = orig.Leader.Type;
-res.Leader.BibLevel = orig.Leader.BibLevel;
-res.Leader.ControlType = String.fromCharCode(48)
-res.Leader.CharacterEncoding = orig.Leader.CharacterEncoding;
-res.Leader.IndicatorCount = orig.Leader.IndicatorCount;
-res.Leader.SubfieldCodeCount = orig.Leader.SubfieldCodeCount;
-res.Leader.EncodingLevel = String.fromCharCode(32)
-res.Leader.CatalogingForm = String.fromCharCode(105)
-res.Leader.MultipartLevel = orig.Leader.MultipartLevel;
-res.Leader.LengthOFFieldPort = orig.Leader.LengthOFFieldPort;
-res.Leader.StartCharPos = orig.Leader.StartCharPos;
-res.Leader.LengthImplemenDefine = orig.Leader.LengthImplemenDefine;
-res.Leader.Undefine = orig.Leader.Undefine;
+destination.Leader.Status = source.Leader.Status;
+destination.Leader.Type = source.Leader.Type;
+destination.Leader.BibLevel = source.Leader.BibLevel;
+destination.Leader.ControlType = String.fromCharCode(48)
+destination.Leader.CharacterEncoding = source.Leader.CharacterEncoding;
+destination.Leader.IndicatorCount = source.Leader.IndicatorCount;
+destination.Leader.SubfieldCodeCount = source.Leader.SubfieldCodeCount;
+destination.Leader.EncodingLevel = String.fromCharCode(32)
+destination.Leader.CatalogingForm = String.fromCharCode(105)
+destination.Leader.MultipartLevel = source.Leader.MultipartLevel;
+destination.Leader.LengthOFFieldPort = source.Leader.LengthOFFieldPort;
+destination.Leader.StartCharPos = source.Leader.StartCharPos;
+destination.Leader.LengthImplemenDefine = source.Leader.LengthImplemenDefine;
+destination.Leader.Undefine = source.Leader.Undefine;
+
+//destination.VariableField.forEach(function(item,i,arr){
+  //console.log(item.Tag);
+  //item.SubFields.forEach(function(item,i,arr){
+    //console.log("\t",item.Name,":",item.Data);
+  //})
+//})
+WriteResult(destination)
