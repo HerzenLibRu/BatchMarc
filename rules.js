@@ -1,14 +1,113 @@
 var source = new MarcRecord();
 LoadSource(source);
 
-
-//source.VariableField.forEach(function(item,i,arr){
-  //console.log(item.Tag);
-  //item.SubFields.forEach(function(item,i,arr){
-    //console.log("\t",item.Name,":",item.Data);
-  //})
-//})
 var destination = new MarcRecord();
+
+var copyRules = [{from:{field:"020",subfield:"c"},to:{field:"010",subfield:"d"}},
+{from:{field:"020",subfield:"e"},to:{field:"010",subfield:"b"}},
+{from:{field:"020",subfield:"t"},to:{field:"010",subfield:"9"}},
+{from:{field:"022",subfield:"a"},to:{field:"011",subfield:"a"}},
+{from:{field:"041",subfield:"a"},to:{field:"101",subfield:"a"}},
+{from:{field:"041",subfield:"h"},to:{field:"101",subfield:"c"}},
+{from:{field:"080",subfield:"a"},to:{field:"675",subfield:"a"}},
+{from:{field:"090",subfield:"a"},to:{field:"899",subfield:"j"}},
+{from:{field:"090",subfield:"e"},to:{field:"899",subfield:"x"}},
+{from:{field:"090",subfield:"f"},to:{field:"899",subfield:"b"}},
+{from:{field:"090",subfield:"h"},to:{field:"899",subfield:"c"}},
+{from:{field:"993",subfield:"c"},to:{field:"899",subfield:"y"}},
+{from:{field:"993",subfield:"e"},to:{field:"899",subfield:"x"}},
+{from:{field:"993",subfield:"h"},to:{field:"899",subfield:"9"}},
+{from:{field:"993",subfield:"n"},to:{field:"899",subfield:"m"}},
+{from:{field:"090",subfield:"s"},to:{field:"899",subfield:"l"}},
+{from:{field:"090",subfield:"x"},to:{field:"899",subfield:"i"}},
+{from:{field:"091",subfield:"a"},to:{field:"686",subfield:"a"}},
+{from:{field:"100",subfield:"а"},to:{field:"700",subfield:"a"}},
+{from:{field:"094",subfield:"a"},to:{field:"316",subfield:"a"}},
+{from:{field:"100",subfield:"b"},to:{field:"700",subfield:"d"}},
+{from:{field:"100",subfield:"c"},to:{field:"700",subfield:"c"}},
+{from:{field:"100",subfield:"d"},to:{field:"700",subfield:"f"}},
+{from:{field:"110",subfield:"a"},to:{field:"710",subfield:"a"}},
+{from:{field:"110",subfield:"b"},to:{field:"710",subfield:"b"}},
+{from:{field:"110",subfield:"c"},to:{field:"710",subfield:"e"}},
+{from:{field:"110",subfield:"d"},to:{field:"710",subfield:"f"}},
+{from:{field:"111",subfield:"a"},to:{field:"710",subfield:"a"}},
+{from:{field:"111",subfield:"c"},to:{field:"710",subfield:"e"}},
+{from:{field:"111",subfield:"d"},to:{field:"710",subfield:"f"}},
+{from:{field:"111",subfield:"e"},to:{field:"710",subfield:"b"}},
+{from:{field:"111",subfield:"n"},to:{field:"710",subfield:"d"}},
+{from:{field:"130",subfield:"a"},to:{field:"500",subfield:"a"}},
+{from:{field:"130",subfield:"p"},to:{field:"500",subfield:"i"}},
+{from:{field:"245",subfield:"a"},to:{field:"200",subfield:"a"}},
+{from:{field:"245",subfield:"b"},to:{field:"200",subfield:"e"}},
+{from:{field:"245",subfield:"c"},to:{field:"200",subfield:"g"}},
+{from:{field:"245",subfield:"h"},to:{field:"200",subfield:"b"}},
+{from:{field:"245",subfield:"n"},to:{field:"200",subfield:"h"}},
+{from:{field:"245",subfield:"o"},to:{field:"200",subfield:"d"}},
+{from:{field:"245",subfield:"z"},to:{field:"200",subfield:"z"}},
+{from:{field:"245",subfield:"p"},to:{field:"200",subfield:"i"}},
+{from:{field:"246",subfield:"a"},to:{field:"517",subfield:"a"}},
+{from:{field:"246",subfield:"g"},to:{field:"200",subfield:"z"}},
+{from:{field:"250",subfield:"a"},to:{field:"205",subfield:"a"}},
+{from:{field:"250",subfield:"b"},to:{field:"205",subfield:"a"}},
+{from:{field:"260",subfield:"a"},to:{field:"210",subfield:"a"}},
+{from:{field:"260",subfield:"b"},to:{field:"210",subfield:"c"}},
+{from:{field:"260",subfield:"c"},to:{field:"210",subfield:"d"}},
+{from:{field:"260",subfield:"e"},to:{field:"210",subfield:"e"}},
+{from:{field:"260",subfield:"f"},to:{field:"210",subfield:"g"}},
+{from:{field:"260",subfield:"g"},to:{field:"210",subfield:"h"}},
+{from:{field:"300",subfield:"a"},to:{field:"215",subfield:"a"}},
+{from:{field:"300",subfield:"b"},to:{field:"215",subfield:"c"}},
+{from:{field:"300",subfield:"c"},to:{field:"215",subfield:"d"}},
+{from:{field:"300",subfield:"d"},to:{field:"316",subfield:"a"}},
+{from:{field:"300",subfield:"e"},to:{field:"215",subfield:"a"}},
+{from:{field:"440",subfield:"a"},to:{field:"225",subfield:"a"}},
+{from:{field:"440",subfield:"n"},to:{field:"225",subfield:"h"}},
+{from:{field:"440",subfield:"p"},to:{field:"225",subfield:"i"}},
+{from:{field:"440",subfield:"v"},to:{field:"225",subfield:"v"}},
+{from:{field:"440",subfield:"x"},to:{field:"225",subfield:"x"}},
+{from:{field:"500",subfield:"a"},to:{field:"300",subfield:"a"}},
+{from:{field:"504",subfield:"a"},to:{field:"320",subfield:"a"}},
+{from:{field:"505",subfield:"a"},to:{field:"327",subfield:"a"}},
+{from:{field:"508",subfield:"a"},to:{field:"317",subfield:"a"}},
+{from:{field:"515",subfield:"a"},to:{field:"317",subfield:"a"}},
+{from:{field:"518",subfield:"a"},to:{field:"317",subfield:"a"}},
+{from:{field:"520",subfield:"a"},to:{field:"330",subfield:"a"}},
+{from:{field:"600",subfield:"a"},to:{field:"600",subfield:"a"}},
+{from:{field:"690",subfield:"a"},to:{field:"600",subfield:"a"}},
+{from:{field:"998",subfield:"a"},to:{field:"600",subfield:"a"}},
+{from:{field:"630",subfield:"a"},to:{field:"605",subfield:"a"}},
+{from:{field:"630",subfield:"p"},to:{field:"605",subfield:"i"}},
+{from:{field:"650",subfield:"a"},to:{field:"606",subfield:"a"}},
+{from:{field:"650",subfield:"b"},to:{field:"607",subfield:"a"}},
+{from:{field:"650",subfield:"x"},to:{field:"606",subfield:"x"}},
+{from:{field:"650",subfield:"y"},to:{field:"606",subfield:"z"}},
+{from:{field:"650",subfield:"z"},to:{field:"606",subfield:"y"}},
+{from:{field:"653",subfield:"a"},to:{field:"610",subfield:"a"}},
+{from:{field:"675",subfield:"a"},to:{field:"317",subfield:"z"}},
+{from:{field:"680",subfield:"a"},to:{field:"317",subfield:"b"}},
+{from:{field:"685",subfield:"a"},to:{field:"317",subfield:"y"}},
+{from:{field:"700",subfield:"a"},to:{field:"701",subfield:"a"}}]
+
+var indicators = [];
+indicators["101"] = ["0","#"];
+indicators["200"] = ["1","#"];
+indicators["225"] = ["1","#"];
+indicators["327"] = ["1","#"];
+indicators["500"] = ["1","0"];
+indicators["510"] = ["1","#"];
+indicators["512"] = ["1","#"];
+indicators["513"] = ["1","#"];
+indicators["514"] = ["1","#"];
+indicators["516"] = ["1","#"];
+indicators["517"] = ["1","#"];
+indicators["532"] = ["1","0"];
+indicators["606"] = ["1","#"];
+indicators["700"] = ["#","1"];
+indicators["701"] = ["#","1"];
+indicators["702"] = ["#","1"];
+indicators["710"] = ["0","2"];
+indicators["711"] = ["0","2"];
+indicators["712"] = ["0","2"];
 
 source.GetField = function(field) {
   sItem = false;
@@ -77,124 +176,47 @@ destination.GetSubfield = function(field, subfield) {
   return sItem;
 }
 
-function RawCopyField(from, to) {
-  if (!source.GetField(from)){
-    return;
-  }
-  destination.VariableField.push(source.GetField(from))
-  destination.GetField(to).Tag = to;
-}
+destination.Leader.Status = source.Leader.Status;
+destination.Leader.Type = source.Leader.Type;
+destination.Leader.BibLevel = source.Leader.BibLevel;
+destination.Leader.ControlType = String.fromCharCode(48)
+destination.Leader.CharacterEncoding = source.Leader.CharacterEncoding;
+destination.Leader.IndicatorCount = source.Leader.IndicatorCount;
+destination.Leader.SubfieldCodeCount = source.Leader.SubfieldCodeCount;
+destination.Leader.EncodingLevel = String.fromCharCode(32)
+destination.Leader.CatalogingForm = String.fromCharCode(105)
+destination.Leader.MultipartLevel = source.Leader.MultipartLevel;
+destination.Leader.LengthOFFieldPort = source.Leader.LengthOFFieldPort;
+destination.Leader.StartCharPos = source.Leader.StartCharPos;
+destination.Leader.LengthImplemenDefine = source.Leader.LengthImplemenDefine;
+destination.Leader.Undefine = source.Leader.Undefine;
 
-function CopySubfield(fromField, fromSubFields, toField, toSubfield) {
-  if (!source.GetField(fromField)){
-    return;
-  }
-  if (!source.IsExistsSubfield(fromField, fromSubFields)){
-    return;
-  }
-  if (!destination.GetField(toField)) {
-    vf = new VariableField();
-    vf.Tag = toField;
-    vf.HasIndicators = true;
-    vf.Indicators = ["#","#"];
-    destination.VariableField.push(vf)
-  }
-  vsf = new VariableSubField();
-  vsf.Name = toSubfield;
-  vsf.Data = source.GetSubfield(fromField, fromSubFields).Data;
-  destination.GetField(toField).SubFields.push(vsf)
-}
-
-
-RawCopyField("001", "001");
-RawCopyField("005", "005");
-
-CopySubfield("020", "c", "010", "d");
-CopySubfield("020","e","010","b");
-CopySubfield("020","t","010","9");
-CopySubfield("022","a","011","a");
-CopySubfield("041","a","101","a");
-CopySubfield("041","h","101","c");
-CopySubfield("080","a","675","a");
-CopySubfield("090","a","899","j");
-CopySubfield("090","e","899","x");
-CopySubfield("090","f","899","b");
-CopySubfield("090","h","899","c");
-CopySubfield("993","c","899","y");
-CopySubfield("993","e","899","x");
-CopySubfield("993","h","899","9");
-CopySubfield("993","n","899","m");
-CopySubfield("090","s","899","l");
-CopySubfield("090","x","899","i");
-CopySubfield("091","a","686","a");
-CopySubfield("100","а","700","a");
-CopySubfield("094","a","316","a");
-CopySubfield("100","b","700","d");
-CopySubfield("100","c","700","c");
-CopySubfield("100","d","700","f");
-CopySubfield("110","a","710","a");
-CopySubfield("110","b","710","b");
-CopySubfield("110","c","710","e");
-CopySubfield("110","d","710","f");
-CopySubfield("111","a","710","a");
-CopySubfield("111","c","710","e");
-CopySubfield("111","d","710","f");
-CopySubfield("111","e","710","b");
-CopySubfield("111","n","710","d");
-CopySubfield("130","a","500","a");
-CopySubfield("130","p","500","i");
-CopySubfield("245","a","200","a");
-CopySubfield("245","b","200","e");
-CopySubfield("245","c","200","g");
-CopySubfield("245","h","200","b");
-CopySubfield("245","n","200","h");
-CopySubfield("245","o","200","d");
-CopySubfield("245","z","200","z");
-CopySubfield("245","p","200","i");
-CopySubfield("246","a","517","a");
-CopySubfield("246","g","200","z");
-CopySubfield("250","a","205","a");
-CopySubfield("250","b","205","a");
-CopySubfield("260","a","210","a");
-CopySubfield("260","b","210","c");
-CopySubfield("260","c","210","d");
-CopySubfield("260","e","210","e");
-CopySubfield("260","f","210","g");
-CopySubfield("260","g","210","h");
-CopySubfield("300","a","215","a");
-CopySubfield("300","b","215","c");
-CopySubfield("300","c","215","d");
-CopySubfield("300","d","316","a");
-CopySubfield("300","e","215","a");
-CopySubfield("440","a","225","a");
-CopySubfield("440","n","225","h");
-CopySubfield("440","p","225","i");
-CopySubfield("440","v","225","v");
-CopySubfield("440","x","225","x");
-CopySubfield("500","a","300","a");
-CopySubfield("504","a","320","a");
-CopySubfield("505","a","327","a");
-CopySubfield("508","a","317","a");
-CopySubfield("515","a","317","a");
-CopySubfield("518","a","317","a");
-CopySubfield("520","a","330","a");
-CopySubfield("600","a","600","a");
-CopySubfield("690","a","600","a");
-CopySubfield("998","a","600","a");
-CopySubfield("630","a","605","a");
-CopySubfield("630","p","605","i");
-CopySubfield("650","a","606","a");
-CopySubfield("650","b","607","a");
-CopySubfield("650","x","606","x");
-CopySubfield("650","y","606","z");
-CopySubfield("650","z","606","y");
-CopySubfield("653","a","610","a");
-CopySubfield("675","a","317","z");
-CopySubfield("680","a","317","b");
-CopySubfield("685","a","317","y");
-CopySubfield("700","a","701","a");
-
-
+copyRules.forEach(function(rule, index, rules) {
+  source.VariableField.forEach(function(record, i, arr){
+    if (record.Tag == rule.from.field) {
+      record.SubFields.forEach(function(sf, j, sfArr){
+        if (sf.Name == rule.from.subfield) {
+          vf = destination.GetField(rule.to.field)
+          if (!vf) {
+            vf = new VariableField();
+            vf.Tag = rule.to.field;
+            vf.HasIndicators = true;
+            inds = indicators[rule.to.field];
+            if (!inds) {
+              inds = ["#","#"];
+            }
+            vf.Indicators = inds;
+            destination.VariableField.push(vf)
+          }
+          vsf = new VariableSubField();
+          vsf.Name = rule.to.subfield;
+          vsf.Data = sf.Data;
+          vf.SubFields.push(vsf)
+        }
+      })
+    }
+  })
+})
 
 //ISBN Handler
 if (!destination.GetField("010")) {
@@ -285,48 +307,23 @@ if (destination.IsExistsSubfield("686","a")) {
   }
 }
 
-var indicators = [];
-indicators["101"] = ["0","#"];
-indicators["200"] = ["1","#"];
-indicators["225"] = ["1","#"];
-indicators["327"] = ["1","#"];
-indicators["500"] = ["1","0"];
-indicators["510"] = ["1","#"];
-indicators["512"] = ["1","#"];
-indicators["513"] = ["1","#"];
-indicators["514"] = ["1","#"];
-indicators["516"] = ["1","#"];
-indicators["517"] = ["1","#"];
-indicators["532"] = ["1","0"];
-indicators["606"] = ["1","#"];
-indicators["700"] = ["#","1"];
-indicators["701"] = ["#","1"];
-indicators["702"] = ["#","1"];
-indicators["710"] = ["0","2"];
-indicators["711"] = ["0","2"];
-indicators["712"] = ["0","2"];
+//source.VariableField.forEach(function(item,i,arr){
+  //console.log(item.Tag);
+  //item.SubFields.forEach(function(item,i,arr){
+    //console.log("\t",item.Name,":",item.Data);
+  //})
+//})
 
-
-indicators.forEach(function(item, i, arr) {
-  if (destination.GetField(i)) {
-    destination.GetField(i).Indicators = item;
+function RawCopyField(from, to) {
+  if (!source.GetField(from)){
+    return;
   }
-})
+  destination.VariableField.push(source.GetField(from))
+  destination.GetField(to).Tag = to;
+}
 
-destination.Leader.Status = source.Leader.Status;
-destination.Leader.Type = source.Leader.Type;
-destination.Leader.BibLevel = source.Leader.BibLevel;
-destination.Leader.ControlType = String.fromCharCode(48)
-destination.Leader.CharacterEncoding = source.Leader.CharacterEncoding;
-destination.Leader.IndicatorCount = source.Leader.IndicatorCount;
-destination.Leader.SubfieldCodeCount = source.Leader.SubfieldCodeCount;
-destination.Leader.EncodingLevel = String.fromCharCode(32)
-destination.Leader.CatalogingForm = String.fromCharCode(105)
-destination.Leader.MultipartLevel = source.Leader.MultipartLevel;
-destination.Leader.LengthOFFieldPort = source.Leader.LengthOFFieldPort;
-destination.Leader.StartCharPos = source.Leader.StartCharPos;
-destination.Leader.LengthImplemenDefine = source.Leader.LengthImplemenDefine;
-destination.Leader.Undefine = source.Leader.Undefine;
+RawCopyField("001", "001");
+RawCopyField("005", "005");
 
 //destination.VariableField.forEach(function(item,i,arr){
   //console.log(item.Tag);
