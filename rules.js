@@ -251,14 +251,14 @@ if (day.length < 2) {
 currentDate = currentDate + month +day;
 var data = currentDate + "d";
 if (source.IsExistsSubfield("260","c")) {
-  currentDate = currentDate + source.GetSubfield("260","c").Data;
+  data = data + source.GetSubfield("260","c").Data;
 } else {
-  currentDate = currentDate + currentDate.substr(0,8);
+  data = data + currentDate.substr(0,8);
 }
-currentDate = currentDate + "####u##Y0rusY0102####ca";
+data = data + "####u##y0rusy0102####ca";
 vfs = new VariableSubField();
 vfs.Name = "a"
-vfs.Data = currentDate;
+vfs.Data = data;
 if (!destination.GetField("100")) {
   vf = new VariableField();
   vf.Tag = "100";
